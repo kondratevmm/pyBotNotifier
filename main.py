@@ -158,7 +158,7 @@ async def process_account_state(message: types.Message, state: FSMContext):
             await States.new_rate.set()
             await message.answer("Укажите процентное изменение портфеля, при котором хотите получать уведомление")
         elif account_action == "discardRate":
-            c.execute('UPDATE Accounts SET daily_change_rate=NULL WHERE account_id=?', (account_id,))
+            c.execute('UPDATE Accounts SET daily_change_rate=0.0 WHERE account_id=?', (account_id,))
             conn.commit()
             await message.answer("Вы сбросили процентное изменение портфеля для данного account_id")
             await state.finish()
