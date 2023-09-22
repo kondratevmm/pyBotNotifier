@@ -86,12 +86,13 @@ async def write_data(user_id):
 async def update_amounts(account_id):
     data = invest_requests.getAccountsAmounts()
     for item in data:
-        if str(item[0]) == account_id:
+        if str(item[0]) == str(account_id):
             print(f"Update {account_id}: {item[2]}")
             c.execute(
-                "UPDATE Accounts SET amount_rub = ?, last_updated = ? WHERE account_id = ?",
+                "UPDATE Accounts SET amount_rub = ?, last_updated = ?, amount_rub_notified = NULL, last_notified_change = NULL, last_notification_date = NULL WHERE account_id = ?",
                 (item[2], datetime.now().date().isoformat(), account_id)
             )
+            print(datetime.now().date().isoformat())
             conn.commit()
             break
 
@@ -194,29 +195,7 @@ async def send_function_list(message: types.Message):
 Блок с job'ой
 '''
 
-async def job(dp: Dispatcher):
-
-    # Здесь мы получим все аккаунты, чтобы в конце дня обновить их - НА ДАННЫЙ МОМЕНТ НЕ РАБОТАЕТ!!!
-    c.execute('SELECT * FROM Accounts')
-    accounts = c.fetchall()
-    for account in accounts:
-        account_id = account[2]
-
-        # await update_amounts(account_id) - нужна для дебага
-
-        current_time = datetime.now()
-
-        if datetime(current_time.year, current_time.month, current_time.day, 23, 50) <= current_time <= datetime(
-                current_time.year, current_time.month, current_time.day, 23, 59, 59):
-            await update_amounts(account_id)
-            print("Обновили значения amount_rub и last_updated в таблицe Accounts")
-
-            # Высчитываем, сколько времени осталось до конца дня
-            tomorrow = current_time + timedelta(days=1)
-            midnight = datetime(year=tomorrow.year, month=tomorrow.month, day=tomorrow.day, hour=0, minute=0, second=0)
-            sleep_time = (midnight - current_time).total_seconds()
-            print("Засыпаем до 00:00:01")
-            await asyncio.sleep(sleep_time)  # Останавливаем выполнение программы до 00:00:01 следующего дня
+async def check_changes(dp: Dispatcher):
 
     # Здесь мы получим все аккаунты, где daily_change_rate не равен 0.0
     c.execute('SELECT * FROM Accounts WHERE daily_change_rate != 0.0')
@@ -273,9 +252,20 @@ async def job(dp: Dispatcher):
         else:
             print("Уведомление не будет отправлено т.к. условие не соблюдено")
 
+async def update_accs(dp: Dispatcher):
+    # Здесь получаем все аккаунты и обновляем таблицу
+    c.execute('SELECT * FROM Accounts')
+    accounts = c.fetchall()
+    for account in accounts:
+        account_id = account[2]
+        print(account[2])
+        if account_id:
+            await update_amounts(account_id)
+    print("Закончили обновление")
 
 scheduler = AsyncIOScheduler()
-scheduler.add_job(job, 'interval', args=[dp], seconds=30)
+scheduler.add_job(check_changes, 'interval', args=[dp], seconds=30)
+scheduler.add_job(update_accs, 'cron', args=[dp], hour=23, minute=50)
 scheduler.start()
 
 if __name__ == "__main__":
