@@ -9,9 +9,8 @@ from tabulate import tabulate
 import auth
 import invest_requests
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from datetime import datetime, time, date, timedelta
+from datetime import datetime, date
 import ast
-import asyncio
 
 API_TOKEN = auth.BOT_TOKEN
 
@@ -24,7 +23,9 @@ class States(StatesGroup):
     account_id = State()
     new_rate = State()
 
-conn = sqlite3.connect("invest.db")
+db_path = "invest.db"
+
+conn = sqlite3.connect(db_path)
 
 c = conn.cursor()
 # создаем таблицу в нашей базе данных SQLite
@@ -82,19 +83,6 @@ async def write_data(user_id):
         )
     conn.commit()
     return await bot.send_message(chat_id=user_id, text="Данные успешно сохранены.")
-
-async def update_amounts(account_id):
-    data = invest_requests.getAccountsAmounts()
-    for item in data:
-        if str(item[0]) == str(account_id):
-            print(f"Update {account_id}: {item[2]}")
-            c.execute(
-                "UPDATE Accounts SET amount_rub = ?, last_updated = ?, amount_rub_notified = NULL, last_notified_change = NULL, last_notification_date = NULL WHERE account_id = ?",
-                (item[2], datetime.now().date().isoformat(), account_id)
-            )
-            print(datetime.now().date().isoformat())
-            conn.commit()
-            break
 
 @dp.message_handler(commands=["getCurrentSettings"])
 async def get_current_settings(message: types.Message):
@@ -195,7 +183,7 @@ async def send_function_list(message: types.Message):
 Блок с job'ой
 '''
 
-async def check_changes(dp: Dispatcher):
+async def check_changes():
 
     # Здесь мы получим все аккаунты, где daily_change_rate не равен 0.0
     c.execute('SELECT * FROM Accounts WHERE daily_change_rate != 0.0')
@@ -250,22 +238,30 @@ async def check_changes(dp: Dispatcher):
                                        f"Изменение за день по портфелю {account[3]} превысило установленные {daily_change_rate}% и составило {round(actual_change_rate, 3)}%")
                 print(f"Уведомление отправлено для аккаунта {account_id}")
         else:
-            print("Уведомление не будет отправлено т.к. условие не соблюдено")
+            print("Уведомление не будет отправлено т.к. сегодня уже высылалось")
 
-async def update_accs(dp: Dispatcher):
-    # Здесь получаем все аккаунты и обновляем таблицу
+async def update_all_accounts():
+    data = invest_requests.getAccountsAmounts()
+
     c.execute('SELECT * FROM Accounts')
     accounts = c.fetchall()
+
     for account in accounts:
         account_id = account[2]
-        print(account[2])
-        if account_id:
-            await update_amounts(account_id)
+        for item in data:
+            if item[0] == str(account_id):
+                print(f"Update {account_id}: {item[2]}")
+                c.execute(
+                    "UPDATE Accounts SET amount_rub = ?, last_updated = ?, amount_rub_notified = NULL, last_notified_change = NULL, last_notification_date = NULL WHERE account_id = ?",
+                    (item[2], datetime.now().date().isoformat(), account_id)
+                )
+                conn.commit()
+
     print("Закончили обновление")
 
 scheduler = AsyncIOScheduler()
-scheduler.add_job(check_changes, 'interval', args=[dp], seconds=30)
-scheduler.add_job(update_accs, 'cron', args=[dp], hour=23, minute=50)
+scheduler.add_job(check_changes, 'interval', seconds=30)
+scheduler.add_job(update_all_accounts, 'cron', hour=23, minute=50)
 scheduler.start()
 
 if __name__ == "__main__":
