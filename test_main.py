@@ -3,7 +3,7 @@ from unittest.mock import patch
 import sqlite3
 
 import invest_requests
-from temp2 import add_user_to_db
+from main import add_user_to_db
 
 db_path_test = ":memory:"
 
@@ -18,7 +18,7 @@ class TestAddUserToDatabase(unittest.TestCase):
         )
         self.db.commit()
 
-    @patch('temp2.sqlite3.connect')
+    @patch('main.sqlite3.connect')
     def test_add_user(self, mock_sql_connect):
         mock_sql_connect.return_value = self.db
         test_user_id = 999999999
